@@ -1,0 +1,190 @@
+package redisstore
+
+import (
+	"encoding/base32"
+	"errors"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/boxgo/redisstore/serializer"
+	"github.com/go-redis/redis/v7"
+	"github.com/gorilla/securecookie"
+	"github.com/gorilla/sessions"
+)
+
+type (
+	RedisStore struct {
+		client     redis.UniversalClient
+		codecs     []securecookie.Codec
+		options    *sessions.Options
+		maxLength  int
+		keyPrefix  string
+		keyGenFunc KeyGenFunc
+		serializer serializer.SessionSerializer
+	}
+
+	Options struct {
+		Codecs     []securecookie.Codec
+		Options    *sessions.Options
+		MaxLength  int
+		KeyPrefix  string
+		KeyGenFunc KeyGenFunc
+		Serializer serializer.SessionSerializer
+	}
+
+	Option func(ops *Options)
+
+	KeyGenFunc func(*http.Request) (string, error)
+)
+
+const (
+	defaultMaxLen    = 4096
+	defaultKeyPrefix = "session_"
+	defaultMaxAge    = 864000 * 30
+	defaultPath      = "/"
+)
+
+func NewStoreWithUniversalClient(client redis.UniversalClient, optFns ...Option) (*RedisStore, error) {
+	newOpts := &Options{}
+	for _, optFn := range optFns {
+		optFn(newOpts)
+	}
+
+	if newOpts.Options == nil {
+		newOpts.Options = &sessions.Options{
+			Path:   defaultPath,
+			MaxAge: defaultMaxAge,
+		}
+	}
+	if newOpts.MaxLength == 0 {
+		newOpts.MaxLength = defaultMaxLen
+	}
+	if newOpts.KeyPrefix == "" {
+		newOpts.KeyPrefix = defaultKeyPrefix
+	}
+	if newOpts.Serializer == nil {
+		newOpts.Serializer = &serializer.GobSerializer{}
+	}
+	if newOpts.KeyGenFunc == nil {
+		newOpts.KeyGenFunc = GenerateRandomKey
+	}
+
+	return &RedisStore{
+		client:     client,
+		codecs:     newOpts.Codecs,
+		options:    newOpts.Options,
+		maxLength:  newOpts.MaxLength,
+		keyPrefix:  newOpts.KeyPrefix,
+		keyGenFunc: newOpts.KeyGenFunc,
+		serializer: newOpts.Serializer,
+	}, nil
+}
+
+// Get should return a cached session.
+func (st *RedisStore) Get(r *http.Request, name string) (*sessions.Session, error) {
+	return sessions.GetRegistry(r).Get(st, name)
+}
+
+// New should create and return a new session.
+//
+// Note that New should never return a nil session, even in the case of
+// an error if using the Registry infrastructure to cache the session.
+func (st *RedisStore) New(r *http.Request, name string) (*sessions.Session, error) {
+	var (
+		err error
+		ok  bool
+	)
+	session := sessions.NewSession(st, name)
+
+	// make a copy
+	options := *st.options
+	session.Options = &options
+	session.IsNew = true
+
+	if c, errCookie := r.Cookie(name); errCookie == nil {
+		err = securecookie.DecodeMulti(name, c.Value, &session.ID, st.codecs...)
+		if err == nil {
+			ok, err = st.load(session)
+			session.IsNew = !(err == nil && ok) // not new if no error and data available
+		}
+	}
+	return session, err
+}
+
+// Save should persist session to the underlying store implementation.
+func (st *RedisStore) Save(r *http.Request, w http.ResponseWriter, session *sessions.Session) error {
+	// Marked for deletion.
+	if session.Options.MaxAge <= 0 {
+		if err := st.delete(session); err != nil {
+			return err
+		}
+
+		http.SetCookie(w, sessions.NewCookie(session.Name(), "", session.Options))
+	} else {
+		// Build an alphanumeric key for the redis store.
+		if session.ID == "" {
+			var keyGenFunc = st.keyGenFunc
+			if keyGenFunc == nil {
+				keyGenFunc = GenerateRandomKey
+			}
+
+			id, err := keyGenFunc(r)
+			if err != nil {
+				return errors.New("redistore: failed to generate session id")
+			}
+
+			session.ID = id
+		}
+
+		if err := st.save(session); err != nil {
+			return err
+		}
+
+		encoded, err := securecookie.EncodeMulti(session.Name(), session.ID, st.codecs...)
+		if err != nil {
+			return err
+		}
+
+		http.SetCookie(w, sessions.NewCookie(session.Name(), encoded, session.Options))
+	}
+	return nil
+}
+
+func (st *RedisStore) SetOptions(opts *sessions.Options) {
+	st.options = opts
+}
+
+func (st *RedisStore) save(session *sessions.Session) error {
+	b, err := st.serializer.Serialize(session)
+	if err != nil {
+		return err
+	}
+
+	if st.maxLength != 0 && len(b) > st.maxLength {
+		return errors.New("SessionStore: the value to store is too big")
+	}
+
+	return st.client.Set(st.key(session), b, time.Duration(session.Options.MaxAge)*time.Second).Err()
+}
+
+func (st *RedisStore) load(session *sessions.Session) (bool, error) {
+	b, err := st.client.Get(st.key(session)).Bytes()
+	if err != nil {
+		return false, err
+	}
+
+	return true, st.serializer.Deserialize(b, session)
+}
+
+func (st *RedisStore) delete(session *sessions.Session) error {
+	return st.client.Del(st.key(session)).Err()
+}
+
+func (st *RedisStore) key(session *sessions.Session) string {
+	return st.keyPrefix + session.ID
+}
+
+func GenerateRandomKey(r *http.Request) (string, error) {
+	return strings.TrimRight(base32.StdEncoding.EncodeToString(securecookie.GenerateRandomKey(32)), "="), nil
+}
