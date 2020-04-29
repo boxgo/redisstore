@@ -28,4 +28,4 @@ script:
   - go test -v -covermode=count -coverprofile=coverage.out
 
 after_success:
-  - goveralls -coverprofile=coverage.out -service=travis-ci -repotoken dStcBwBbqfvdpCITUkyI23I8wNdNCcaOn
+  - goveralls -coverprofile=coverage.out -service=travis-ci -repotoken BBDsuIEcM6fKyMnY96GWswePruhKnge1X
