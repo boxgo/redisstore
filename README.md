@@ -22,7 +22,7 @@ Depends on the [go-redis/redis](https://github.com/go-redis/redis) Redis library
 
 ## Installation
 ```sh
-    go get github.com/boxgo/redistore
+    go get github.com/boxgo/redisstore
 ```
 
 ### Example
