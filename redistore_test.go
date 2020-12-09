@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/boxgo/redisstore/serializer"
-	"github.com/go-redis/redis/v7"
+	"github.com/go-redis/redis/v8"
 	"github.com/gorilla/sessions"
 )
 

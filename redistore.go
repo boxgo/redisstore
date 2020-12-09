@@ -1,6 +1,7 @@
 package redisstore
 
 import (
+	"context"
 	"encoding/base32"
 	"errors"
 	"net/http"
@@ -8,7 +9,7 @@ import (
 	"time"
 
 	"github.com/boxgo/redisstore/serializer"
-	"github.com/go-redis/redis/v7"
+	"github.com/go-redis/redis/v8"
 	"github.com/gorilla/securecookie"
 	"github.com/gorilla/sessions"
 )
@@ -165,11 +166,11 @@ func (st *RedisStore) save(session *sessions.Session) error {
 		return errors.New("SessionStore: the value to store is too big")
 	}
 
-	return st.client.Set(st.key(session), b, time.Duration(session.Options.MaxAge)*time.Second).Err()
+	return st.client.Set(context.Background(), st.key(session), b, time.Duration(session.Options.MaxAge)*time.Second).Err()
 }
 
 func (st *RedisStore) load(session *sessions.Session) (bool, error) {
-	b, err := st.client.Get(st.key(session)).Bytes()
+	b, err := st.client.Get(context.Background(), st.key(session)).Bytes()
 	if err != nil {
 		return false, err
 	}
@@ -178,7 +179,7 @@ func (st *RedisStore) load(session *sessions.Session) (bool, error) {
 }
 
 func (st *RedisStore) delete(session *sessions.Session) error {
-	return st.client.Del(st.key(session)).Err()
+	return st.client.Del(context.Background(), st.key(session)).Err()
 }
 
 func (st *RedisStore) key(session *sessions.Session) string {
