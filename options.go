@@ -1,7 +1,7 @@
 package redisstore
 
 import (
-	"github.com/boxgo/redisstore/serializer"
+	"github.com/boxgo/redisstore/v2/serializer"
 	"github.com/gorilla/securecookie"
 	"github.com/gorilla/sessions"
 )
