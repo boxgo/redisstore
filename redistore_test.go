@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/boxgo/redisstore/v2/serializer"
-	"github.com/go-redis/redis/v8"
 	"github.com/gorilla/sessions"
+	"github.com/redis/go-redis/v9"
 )
 
 func newClient() redis.UniversalClient {
