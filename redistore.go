@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/boxgo/redisstore/v2/serializer"
+	"github.com/boxgo/redisstore/v3/serializer"
 	"github.com/gorilla/securecookie"
 	"github.com/gorilla/sessions"
 	"github.com/redis/go-redis/v9"

@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/boxgo/redisstore/v2/serializer"
+	"github.com/boxgo/redisstore/v3/serializer"
 	"github.com/gorilla/sessions"
 	"github.com/redis/go-redis/v9"
 )

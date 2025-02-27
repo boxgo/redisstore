@@ -1,4 +1,4 @@
-module github.com/boxgo/redisstore/v2
+module github.com/boxgo/redisstore/v3
 
 go 1.14
 
